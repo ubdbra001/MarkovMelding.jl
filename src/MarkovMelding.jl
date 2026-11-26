@@ -17,7 +17,7 @@ module MarkovMelding
 
 
 import LogDensityProblems, AbstractMCMC, AdvancedMH
-using JuliaBUGS: model_parameters, BUGSModel
+using JuliaBUGS: model_parameters, BUGSModel, Bijectors
 
 using Random
 using Distributions
@@ -63,10 +63,13 @@ Holds details of link parameters
 # Fields
 - `names`: The name of the link parameter in each submodel.
 - `priors`: The priors for the link parameter in each submodel.
+- `inv_b`: Inverse bijector mapping the link parameter from unconstrained space to its
+  constrained prior support (shared across all submodels).
 """
 struct SharedLink{B}
     names::Vector{Symbol}
     priors::Vector
+    inv_b::B
 end
 
 """
@@ -211,7 +214,11 @@ function meld(
     
     # Ensure that all priors have the same support
     validate_link_priors(priors)
-    shared_link = SharedLink(links, priors)
+
+    b = Bijectors.bijector(priors[1])
+    inv_b = Bijectors.inverse(b)
+
+    shared_link = SharedLink(links, priors, inv_b)
 
     param_indices, total_dims = build_param_map(submodels, links)
 
@@ -265,12 +272,17 @@ Evaluate the total log-density for a the melded model
 """
 function LogDensityProblems.logdensity(melded::MeldedModel, theta_global)
 
-    phi_val = theta_global[1]
+    phi_val, logjac = Bijectors.with_logabsdet_jacobian(
+        melded.link.inv_b,
+        theta_global[1],
+    )
 
     submodel_thetas = extract_submodel_params(melded, theta_global)
-
     submodel_lps = LogDensityProblems.logdensity.(melded.submodels, submodel_thetas)
-    base_lp = sum(submodel_lps)
+
+    M = length(melded.submodels)
+
+    base_lp = sum(submodel_lps) - (M - 1) * logjac
 
     prior_adj = adjust_prior_logdensity(melded.pooling, melded.link.priors, phi_val)
 
