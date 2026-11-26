@@ -95,6 +95,39 @@ function extract_prior(model, link_symbol::Symbol)
     return node_info.node_function(env, loop_vars)
 end
 
+"""
+    validate_link_priors(priors::AbstractVector{<:Distributions.Distribution})
+
+Validate that the prior distributions assigned to the shared link parameter across all
+submodels are mutually compatible.
+
+Throws an `ArgumentError` if:
+- `priors` mixes continuous and discrete distributions across submodels.
+- `priors` have mismatched supports across submodels (for example, combining a constrained
+  prior such as `Gamma` with an unconstrained prior such as `Normal`), ensuring a single
+  shared bijector applies uniformly across all submodels.
+
+Returns `nothing` when all priors pass validation (or when `length(priors) <= 1`).
+"""
+function validate_link_priors(priors::AbstractVector{<:Distributions.Distribution})
+    length(priors) <= 1 && return nothing
+
+    # Prevent mixing continuous and discrete distributions
+    !allequal(p isa Distributions.ContinuousDistribution for p in priors) &&
+        throw(ArgumentError("""
+            Link parameter mixes continuous and discrete priors across submodels.
+            This is not currently supported. Please re-examine your link parameter definitions."""
+        ))
+
+    # Prevent mixing constrained and unconstrained priors (or mismatched bounds)
+    !allequal(Distributions.support(p) for p in priors) &&
+        throw(ArgumentError("""
+            Link parameter has mismatched prior supports across submodels (e.g. constrained vs. unconstrained).
+            This is not currently supported. Please re-examine your link parameter definitions."""
+        ))
+
+    return nothing
+end
 
 """
     build_param_map(submodels, links)
@@ -164,6 +197,9 @@ function meld(
     models = BUGSModel[m for m in submodels]
 
     priors = extract_prior.(models, links)
+    
+    # Ensure that all priors have the same support
+    validate_link_priors(priors)
 
     param_indices, total_dims = build_param_map(submodels, links)
 
