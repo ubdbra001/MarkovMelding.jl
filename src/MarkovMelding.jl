@@ -56,6 +56,19 @@ struct Dictatorial <: AbstractPooling
     end
 end
 
+""" SharedLink
+
+Holds details of link parameters
+
+# Fields
+- `names`: The name of the link parameter in each submodel.
+- `priors`: The priors for the link parameter in each submodel.
+"""
+struct SharedLink{B}
+    names::Vector{Symbol}
+    priors::Vector
+end
+
 """
     MeldedModel
 
@@ -63,16 +76,14 @@ The Markov melded target built by [`meld`](@ref).
 
 # Fields
 - `submodels`: The submodels passed to `meld`.
-- `links`: The name of the link parameter in each submodel.
-- `priors`: The priors for the link parameter in each submodel.
+- `links`: Details of the link parameters of the melded model
 - `pooling`: The Pooling method used to meld the submodels.
 - `param_indices`: Indices mapping the global sample to specific submodel parameters.
 - `dimension`: Dimensions of the global sample.
 """
-struct MeldedModel{P<:AbstractPooling}
+struct MeldedModel{P<:AbstractPooling, B}
     submodels::Vector
-    links::Vector
-    priors::Vector
+    link::SharedLink{B}
     pooling::P
     param_indices::Vector
     dimension::Int
@@ -200,16 +211,16 @@ function meld(
     
     # Ensure that all priors have the same support
     validate_link_priors(priors)
+    shared_link = SharedLink(links, priors)
 
     param_indices, total_dims = build_param_map(submodels, links)
 
     return MeldedModel(
         submodels,
-        links,
-        priors,
+        shared_link,
         pooling,
         collect(param_indices),
-        total_dims
+        total_dims,
     )
 end
 
@@ -261,7 +272,7 @@ function LogDensityProblems.logdensity(melded::MeldedModel, theta_global)
     submodel_lps = LogDensityProblems.logdensity.(melded.submodels, submodel_thetas)
     base_lp = sum(submodel_lps)
 
-    prior_adj = adjust_prior_logdensity(melded.pooling, melded.priors, phi_val)
+    prior_adj = adjust_prior_logdensity(melded.pooling, melded.link.priors, phi_val)
 
     return base_lp + prior_adj
 end
