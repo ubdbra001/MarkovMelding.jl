@@ -1,6 +1,7 @@
-using MarkovMelding
 using Test
 
+include("fixtures.jl")
+
 @testset "MarkovMelding.jl" begin
-    # Write your tests here.
+    include("validation.jl")
 end

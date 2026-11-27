@@ -1,0 +1,4 @@
+[deps]
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+JuliaBUGS = "ba9fb4c0-828e-4473-b6a1-cd2560fee5bf"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
