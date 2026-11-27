@@ -144,6 +144,24 @@ function validate_link_priors(priors::AbstractVector{<:Distributions.Distributio
 end
 
 """
+    validate_pooling(pooling::AbstractPooling, M::Integer)
+
+Validate that `pooling` is compatible with `M` submodels.
+
+By default, performs no validation and returns `nothing`. Specialized methods
+throw an error if `pooling` cannot be applied to `M` submodels:
+
+- `pooling::Dictatorial`: Throws a `BoundsError` if `pooling.dictator > M`.
+"""
+validate_pooling(pooling::AbstractPooling, M::Integer) = nothing
+
+function validate_pooling(pooling::Dictatorial, M::Integer)
+    pooling.dictator <= M || throw(
+        ArgumentError("Dictator pooling with index $(pooling.dictator) exceeds the number of submodels ($M)")
+    )
+end
+
+"""
     build_param_map(submodels, links)
 
 Walk over submodels to identify positions of parameters for extraction from sample.
@@ -207,6 +225,8 @@ function meld(
     M >= 1 || throw(ArgumentError("There should be at least one submodel for melding"))
 
     length(links) == M || throw(ArgumentError("got $(length(links)) link specifications for $M submodels"))
+
+    validate_pooling(pooling, M)
 
     models = BUGSModel[m for m in submodels]
 
